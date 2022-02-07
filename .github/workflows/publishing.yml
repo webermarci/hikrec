@@ -1,0 +1,26 @@
+name: Publishing
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Bump version and push tag
+        uses: anothrNick/github-tag-action@1.36.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+
+      - name: Publish doc to go.dev packages
+        run: |
+          git pull
+          export latest="$(git describe --tags `git rev-list --tags --max-count=1`)"
+          curl https://proxy.golang.org/github.com/webermarci/hikrec/@v/$latest.info
