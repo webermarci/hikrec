@@ -152,7 +152,11 @@ func (device *Device) PullRecognitions() (chan Recogniton, error) {
 					case "Likelihood":
 						intValue, err := strconv.Atoi(item.Value)
 						if err == nil {
-							recognition.Likelihood = intValue
+							if intValue > 100 {
+								recognition.Likelihood = intValue / 10
+							} else {
+								recognition.Likelihood = intValue
+							}
 						}
 					case "Nation":
 						recognition.Nation = item.Value
@@ -165,7 +169,7 @@ func (device *Device) PullRecognitions() (chan Recogniton, error) {
 					}
 				}
 
-				if recognition.Plate == "" {
+				if recognition.Plate == "" || recognition.Plate == "unknown" {
 					continue
 				}
 
