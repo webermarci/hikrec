@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -101,9 +102,10 @@ func (soap SOAP) createRequest(to string) string {
 }
 
 func (soap SOAP) createUserToken() string {
-	nonce := createID()
+	now := time.Now()
+	nonce := strconv.FormatInt(now.UnixNano(), 10)
 	nonce64 := base64.StdEncoding.EncodeToString(([]byte)(nonce))
-	timestamp := time.Now().Add(soap.TokenAge).UTC().Format(time.RFC3339)
+	timestamp := now.Add(soap.TokenAge).UTC().Format(time.RFC3339)
 	token := string(nonce) + timestamp + soap.Password
 
 	sha := sha1.New()
