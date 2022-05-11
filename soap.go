@@ -8,19 +8,16 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type SOAP struct {
 	Body     string
-	XMLNs    []string
 	User     string
 	Password string
-	TokenAge time.Duration
 	Action   string
-	NoDebug  bool
 }
 
 func (soap SOAP) SendRequest(xaddr string, to string) (*Envelope, error) {
@@ -31,9 +28,7 @@ func (soap SOAP) SendRequest(xaddr string, to string) (*Envelope, error) {
 		return nil, err
 	}
 
-	if soap.User != "" {
-		urlXAddr.User = url.UserPassword(soap.User, soap.Password)
-	}
+	urlXAddr.User = url.UserPassword(soap.User, soap.Password)
 
 	buffer := bytes.NewBuffer([]byte(request))
 	req, err := http.NewRequest("POST", urlXAddr.String(), buffer)
@@ -64,48 +59,32 @@ func (soap SOAP) SendRequest(xaddr string, to string) (*Envelope, error) {
 }
 
 func (soap SOAP) createRequest(to string) string {
-	request := `<?xml version="1.0" encoding="UTF-8"?>`
-	request += `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"`
+	var sb strings.Builder
 
-	for _, namespace := range soap.XMLNs {
-		request += " " + namespace
-	}
-	request += ">"
+	sb.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+	sb.WriteString("<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">")
 
-	if soap.Action != "" || soap.User != "" {
-		request += "<s:Header>"
+	sb.WriteString("<s:Header>")
 
-		if soap.Action != "" {
-			request += `<Action mustUnderstand="1"
-							   xmlns="http://www.w3.org/2005/08/addressing">` + soap.Action + `</Action>`
-		}
+	sb.WriteString("<Action mustUnderstand=\"1\" xmlns=\"http://www.w3.org/2005/08/addressing\">" + soap.Action + "</Action>")
 
-		if soap.User != "" {
-			request += soap.createUserToken()
-		}
+	sb.WriteString(soap.createUserToken())
 
-		if to != "" {
-			request += `<wsa:To>` + to + `</wsa:To>`
-		}
+	sb.WriteString("<wsa:To>" + to + "</wsa:To>")
 
-		request += "</s:Header>"
-	}
+	sb.WriteString("</s:Header>")
 
-	request += "<s:Body>" + soap.Body + "</s:Body>"
+	sb.WriteString("<s:Body>" + soap.Body + "</s:Body>")
+	sb.WriteString("</s:Envelope>")
 
-	request += "</s:Envelope>"
-
-	request = regexp.MustCompile(`\>\s+\<`).ReplaceAllString(request, "><")
-	request = regexp.MustCompile(`\s+`).ReplaceAllString(request, " ")
-
-	return request
+	return sb.String()
 }
 
 func (soap SOAP) createUserToken() string {
 	now := time.Now()
 	nonce := strconv.FormatInt(now.UnixNano(), 10)
 	nonce64 := base64.StdEncoding.EncodeToString(([]byte)(nonce))
-	timestamp := now.Add(soap.TokenAge).UTC().Format(time.RFC3339)
+	timestamp := now.UTC().Format(time.RFC3339)
 	token := string(nonce) + timestamp + soap.Password
 
 	sha := sha1.New()
@@ -113,12 +92,5 @@ func (soap SOAP) createUserToken() string {
 	shaToken := sha.Sum(nil)
 	shaDigest64 := base64.StdEncoding.EncodeToString(shaToken)
 
-	return `<Security s:mustUnderstand="1" xmlns="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
-  		<UsernameToken>
-    		<Username>` + soap.User + `</Username>
-    		<Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest">` + shaDigest64 + `</Password>
-    		<Nonce EncodingType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary">` + nonce64 + `</Nonce>
-    		<Created xmlns="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">` + timestamp + `</Created>
-		</UsernameToken>
-	</Security>`
+	return "<Security s:mustUnderstand=\"1\" xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\"><UsernameToken><Username>" + soap.User + "</Username><Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">" + shaDigest64 + "</Password><Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">" + nonce64 + "</Nonce><Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">" + timestamp + "</Created></UsernameToken></Security>"
 }

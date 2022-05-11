@@ -75,9 +75,7 @@ func (device *Device) CreatePullPointSubscription() (CreatePullPointSubscription
 		User:     device.User,
 		Password: device.Password,
 		Action:   "http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePullPointSubscriptionRequest",
-		Body: `<CreatePullPointSubscription xmlns="http://www.onvif.org/ver10/events/wsdl">
-					<InitialTerminationTime>PT180S</InitialTerminationTime>
-				</CreatePullPointSubscription>`,
+		Body:     "<CreatePullPointSubscription xmlns=\"http://www.onvif.org/ver10/events/wsdl\"><InitialTerminationTime>PT180S</InitialTerminationTime></CreatePullPointSubscription>",
 	}
 
 	envelope, err := soap.SendRequest(device.XAddr, "")
@@ -93,11 +91,7 @@ func (device *Device) PullMessage(address string, to string) ([]Message, error) 
 		User:     device.User,
 		Password: device.Password,
 		Action:   "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest",
-		Body: `<PullMessages xmlns="http://www.onvif.org/ver10/events/wsdl">
-					<Timeout>PT3S</Timeout>
-					<MessageLimit>10</MessageLimit>
-				</PullMessages>`,
-		NoDebug: true,
+		Body:     "<PullMessages xmlns=\"http://www.onvif.org/ver10/events/wsdl\"><Timeout>PT3S</Timeout><MessageLimit>10</MessageLimit></PullMessages>",
 	}
 
 	envelope, err := soap.SendRequest(address, to)
