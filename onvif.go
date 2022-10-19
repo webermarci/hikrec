@@ -3,61 +3,63 @@ package hikrec
 import (
 	"strconv"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-type Envelope struct {
-	Header Header `xml:"Header"`
-	Body   Body   `xml:"Body"`
+type envelope struct {
+	Header header `xml:"Header"`
+	Body   body   `xml:"Body"`
 }
 
-type Header struct {
+type header struct {
 	Action string `xml:"Action"`
 }
 
-type Body struct {
-	CreatePullPointSubscriptionResponse CreatePullPointSubscriptionResponse `xml:"CreatePullPointSubscriptionResponse"`
-	PullMessagesResponse                PullMessagesResponse                `xml:"PullMessagesResponse"`
+type body struct {
+	CreatePullPointSubscriptionResponse createPullPointSubscriptionResponse `xml:"CreatePullPointSubscriptionResponse"`
+	PullMessagesResponse                pullMessagesResponse                `xml:"PullMessagesResponse"`
 }
 
-type CreatePullPointSubscriptionResponse struct {
-	SubscriptionReference SubscriptionReference `xml:"SubscriptionReference"`
+type createPullPointSubscriptionResponse struct {
+	SubscriptionReference subscriptionReference `xml:"SubscriptionReference"`
 	CurrentTime           string                `xml:"CurrentTime"`
 	TerminationTime       string                `xml:"TerminationTime"`
 }
 
-type SubscriptionReference struct {
+type subscriptionReference struct {
 	Address string `xml:"Address"`
 }
 
-type PullMessagesResponse struct {
+type pullMessagesResponse struct {
 	CurrentTime         string              `xml:"CurrentTime"`
 	TerminationTime     string              `xml:"TerminationTime"`
-	NotificationMessage NotificationMessage `xml:"NotificationMessage"`
+	NotificationMessage notificationMessage `xml:"NotificationMessage"`
 }
 
-type NotificationMessage struct {
+type notificationMessage struct {
 	Topic    string   `xml:"Topic"`
-	Messages Messages `xml:"Message"`
+	Messages messages `xml:"Message"`
 }
 
-type Messages struct {
-	Messages []Message `xml:"Message"`
+type messages struct {
+	Messages []message `xml:"Message"`
 }
 
-type Message struct {
-	Source Source `xml:"Source"`
-	Data   Data   `xml:"Data"`
+type message struct {
+	Source source `xml:"Source"`
+	Data   data   `xml:"Data"`
 }
 
-type Source struct {
-	Items []SimpleItem `xml:"SimpleItem"`
+type source struct {
+	Items []simpleItem `xml:"SimpleItem"`
 }
 
-type Data struct {
-	Items []SimpleItem `xml:"SimpleItem"`
+type data struct {
+	Items []simpleItem `xml:"SimpleItem"`
 }
 
-type SimpleItem struct {
+type simpleItem struct {
 	Name  string `xml:"Name,attr"`
 	Value string `xml:"Value,attr"`
 }
@@ -65,36 +67,44 @@ type SimpleItem struct {
 type Device struct {
 	ID       string
 	Name     string
-	XAddr    string
-	User     string
+	Url      string
+	Username string
 	Password string
 }
 
-func (device *Device) CreatePullPointSubscription() (CreatePullPointSubscriptionResponse, error) {
-	soap := SOAP{
-		User:     device.User,
+func NewDevice(url, username, password string) *Device {
+	return &Device{
+		Url:      url,
+		Username: username,
+		Password: password,
+	}
+}
+
+func (device *Device) createPullPointSubscription() (createPullPointSubscriptionResponse, error) {
+	soap := soap{
+		User:     device.Username,
 		Password: device.Password,
 		Action:   "http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePullPointSubscriptionRequest",
 		Body:     "<CreatePullPointSubscription xmlns=\"http://www.onvif.org/ver10/events/wsdl\"><InitialTerminationTime>PT180S</InitialTerminationTime></CreatePullPointSubscription>",
 	}
 
-	envelope, err := soap.SendRequest(device.XAddr, "")
+	envelope, err := soap.sendRequest(device.Url, "")
 	if err != nil {
-		return CreatePullPointSubscriptionResponse{}, err
+		return createPullPointSubscriptionResponse{}, err
 	}
 
 	return envelope.Body.CreatePullPointSubscriptionResponse, nil
 }
 
-func (device *Device) PullMessage(address string, to string) ([]Message, error) {
-	soap := SOAP{
-		User:     device.User,
+func (device *Device) pullMessage(address string, to string) ([]message, error) {
+	soap := soap{
+		User:     device.Username,
 		Password: device.Password,
 		Action:   "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest",
 		Body:     "<PullMessages xmlns=\"http://www.onvif.org/ver10/events/wsdl\"><Timeout>PT3S</Timeout><MessageLimit>10</MessageLimit></PullMessages>",
 	}
 
-	envelope, err := soap.SendRequest(address, to)
+	envelope, err := soap.sendRequest(address, to)
 	if err != nil {
 		return nil, err
 	}
@@ -108,25 +118,25 @@ func (device *Device) PullMessage(address string, to string) ([]Message, error) 
 	return messages, nil
 }
 
-func (device *Device) PullRecognitions() (chan Recogniton, error) {
-	res, err := device.CreatePullPointSubscription()
+func (device *Device) PullRecognitions() (chan Recognition, error) {
+	res, err := device.createPullPointSubscription()
 	if err != nil {
 		return nil, err
 	}
 
 	pullAddress := res.SubscriptionReference.Address
-	outgoing := make(chan Recogniton)
+	outgoing := make(chan Recognition)
 
 	go func() {
 		for {
-			messages, err := device.PullMessage(device.XAddr, pullAddress)
+			messages, err := device.pullMessage(device.Url, pullAddress)
 			if err != nil {
 				time.Sleep(time.Second)
 
-				res, err := device.CreatePullPointSubscription()
+				res, err := device.createPullPointSubscription()
 				for err != nil {
 					time.Sleep(time.Second)
-					res, err = device.CreatePullPointSubscription()
+					res, err = device.createPullPointSubscription()
 				}
 				pullAddress = res.SubscriptionReference.Address
 				continue
@@ -137,7 +147,10 @@ func (device *Device) PullRecognitions() (chan Recogniton, error) {
 			}
 
 			for _, message := range messages {
-				recognition := Recogniton{}
+				recognition := Recognition{
+					UUID:      uuid.NewString(),
+					Timestamp: time.Now(),
+				}
 
 				for _, item := range message.Data.Items {
 					switch item.Name {
@@ -147,9 +160,9 @@ func (device *Device) PullRecognitions() (chan Recogniton, error) {
 						intValue, err := strconv.Atoi(item.Value)
 						if err == nil {
 							if intValue > 100 {
-								recognition.Likelihood = intValue / 10
+								recognition.Confidence = intValue / 10
 							} else {
-								recognition.Likelihood = intValue
+								recognition.Confidence = intValue
 							}
 						}
 					case "Nation":
@@ -157,9 +170,14 @@ func (device *Device) PullRecognitions() (chan Recogniton, error) {
 					case "Country":
 						recognition.Country = item.Value
 					case "VehicleDirection":
-						recognition.Direction = item.Value
-					case "PictureUri":
-						recognition.PictureURL = item.Value
+						switch item.Value {
+						case "reverse":
+							recognition.Direction = Leaving
+						case "forward":
+							recognition.Direction = Approaching
+						default:
+							recognition.Direction = Unknown
+						}
 					}
 				}
 

@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
@@ -33,19 +32,19 @@ import (
 )
 
 var (
-	ErrNilTransport      = errors.New("transport is nil")
-	ErrBadChallenge      = errors.New("challenge is bad")
-	ErrAlgNotImplemented = errors.New("alg not implemented")
+	errNilTransport      = errors.New("transport is nil")
+	errBadChallenge      = errors.New("challenge is bad")
+	errAlgNotImplemented = errors.New("alg not implemented")
 )
 
-type Transport struct {
+type transport struct {
 	Username  string
 	Password  string
 	Transport http.RoundTripper
 }
 
-func NewTransport(username, password string) *Transport {
-	t := &Transport{
+func newTransport(username, password string) *transport {
+	t := &transport{
 		Username: username,
 		Password: password,
 	}
@@ -80,7 +79,7 @@ func parseChallenge(input string) (*challenge, error) {
 	const qs = `"`
 	s := strings.Trim(input, ws)
 	if !strings.HasPrefix(s, "Digest ") {
-		return nil, ErrBadChallenge
+		return nil, errBadChallenge
 	}
 	s = strings.Trim(s[7:], ws)
 	sl := strings.Split(s, ", ")
@@ -106,7 +105,7 @@ func parseChallenge(input string) (*challenge, error) {
 		case "qop":
 			c.Qop = strings.Trim(r[1], qs)
 		default:
-			return nil, ErrBadChallenge
+			return nil, errBadChallenge
 		}
 	}
 	return c, nil
@@ -159,19 +158,19 @@ func (c *credentials) resp(cnonce string) (string, error) {
 	} else if c.MessageQop == "" {
 		return kd(c.ha1(), fmt.Sprintf("%s:%s", c.Nonce, c.ha2())), nil
 	}
-	return "", ErrAlgNotImplemented
+	return "", errAlgNotImplemented
 }
 
 func (c *credentials) authorize() (string, error) {
 	if c.Algorithm != "MD5" {
-		return "", ErrAlgNotImplemented
+		return "", errAlgNotImplemented
 	}
 	if c.MessageQop != "auth" && c.MessageQop != "" {
-		return "", ErrAlgNotImplemented
+		return "", errAlgNotImplemented
 	}
 	resp, err := c.resp("")
 	if err != nil {
-		return "", ErrAlgNotImplemented
+		return "", errAlgNotImplemented
 	}
 	sl := []string{fmt.Sprintf(`username="%s"`, c.Username)}
 	sl = append(sl, fmt.Sprintf(`realm="%s"`, c.Realm))
@@ -192,7 +191,7 @@ func (c *credentials) authorize() (string, error) {
 	return fmt.Sprintf("Digest %s", strings.Join(sl, ", ")), nil
 }
 
-func (t *Transport) newCredentials(req *http.Request, c *challenge) *credentials {
+func (t *transport) newCredentials(req *http.Request, c *challenge) *credentials {
 	return &credentials{
 		Username:   t.Username,
 		Realm:      c.Realm,
@@ -207,9 +206,9 @@ func (t *Transport) newCredentials(req *http.Request, c *challenge) *credentials
 	}
 }
 
-func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *transport) roundTrip(req *http.Request) (*http.Response, error) {
 	if t.Transport == nil {
-		return nil, ErrNilTransport
+		return nil, errNilTransport
 	}
 
 	req2 := new(http.Request)
@@ -226,7 +225,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	chal := resp.Header.Get("WWW-Authenticate")
 	c, err := parseChallenge(chal)
 	if err != nil {
-		_, errR := ioutil.ReadAll(resp.Body)
+		_, errR := io.ReadAll(resp.Body)
 		if errR == nil {
 			return resp, err
 		}
