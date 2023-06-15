@@ -3,8 +3,6 @@ package hikrec
 import (
 	"strconv"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type envelope struct {
@@ -129,10 +127,10 @@ func (device *Device) PullRecognitions() (chan Recognition, error) {
 
 	go func() {
 		for {
+			start := time.Now()
+
 			messages, err := device.pullMessage(device.Url, pullAddress)
 			if err != nil {
-				time.Sleep(time.Second)
-
 				res, err := device.createPullPointSubscription()
 				for err != nil {
 					time.Sleep(time.Second)
@@ -147,10 +145,7 @@ func (device *Device) PullRecognitions() (chan Recognition, error) {
 			}
 
 			for _, message := range messages {
-				recognition := Recognition{
-					UUID:      uuid.NewString(),
-					Timestamp: time.Now(),
-				}
+				recognition := Recognition{}
 
 				for _, item := range message.Data.Items {
 					switch item.Name {
@@ -185,9 +180,9 @@ func (device *Device) PullRecognitions() (chan Recognition, error) {
 					continue
 				}
 
+				recognition.CameraResponseDuration = time.Since(start)
 				outgoing <- recognition
 			}
-
 		}
 	}()
 

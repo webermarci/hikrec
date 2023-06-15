@@ -1,8 +1,6 @@
 package hikrec
 
-import (
-	"time"
-)
+import "time"
 
 type Direction string
 
@@ -13,11 +11,10 @@ const (
 )
 
 type Recognition struct {
-	UUID       string    `json:"uuid"`
-	Timestamp  time.Time `json:"timestamp"`
-	Plate      string    `json:"plate"`
-	Confidence int       `json:"confidence"`
-	Direction  Direction `json:"direction"`
-	Country    string    `json:"country"`
-	Nation     string    `json:"nation"`
+	Plate                  string        `json:"plate"`
+	Confidence             int           `json:"confidence"`
+	Direction              Direction     `json:"direction"`
+	Country                string        `json:"country"`
+	Nation                 string        `json:"nation"`
+	CameraResponseDuration time.Duration `json:"camera_response_duration"`
 }
